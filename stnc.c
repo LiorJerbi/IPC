@@ -64,137 +64,124 @@ int main(int argc, char *argv[]){
             printf("error listener");
             exit(1);
         }
+        socklen_t clilen=sizeof(clientAddr);
+        newfd = accept(listener,(struct sockaddr *)&clientAddr,&clilen);         
+        if(newfd == -1){
+            perror("accept");
+            exit(3);
+        }
+        char pbuff[IV4_SIZE];
+        printf("new connection %s\n", inet_ntop(AF_INET,&clientAddr.sin_addr,pbuff,IV4_SIZE));
+            
         pfds[0].fd=listener;
         pfds[0].events=POLLIN;
         pfds[1].fd = STDIN_FILENO;
         pfds[1].events=POLLIN;
-
-        ++fd_count;
-
+        pfds[2].fd = newfd;
+        pfds[2].events = POLLIN;
+        fd_count = 3;
         for(;;){        //for ever
             int poll_count = poll(pfds, fd_count, -1);
-
             if(poll_count==-1){
                 perror("poll");
                 exit(2);
             }
-
-            for(int i=0; i<fd_count;i++){
-                if(pfds[i].revents & POLLIN){
-                    if(pfds[i].fd == listener){
-                        socklen_t clilen=sizeof(clientAddr);
-                        newfd = accept(listener,(struct sockaddr *)&clientAddr,&clilen);         
-                        if(newfd == -1){
-                            perror("accept");
-                            exit(3);
-                        }
-                        else{
-                            addfds(&pfds,newfd,&fd_count,&fd_size);
-                            char pbuff[IV4_SIZE];
-                            printf("new connection %s\n", inet_ntop(AF_INET,&clientAddr.sin_addr,pbuff,IV4_SIZE));
-                            
-                        }
+            memset(buff,0,sizeof(buff));
+            if(pfds[1].revents & POLLIN){
+                char input[256];
+                if(fgets(input, sizeof(input), stdin) != NULL) {
+                    if(send(pfds[2].fd, input, strlen(input), 0) == -1) {
+                        perror("send");
                     }
-                    else if(pfds[i].fd == STDIN_FILENO){
-                        printf("input comingn\n");
-                        char input[256];
-                        if(fgets(input, sizeof(input), stdin) != NULL) {
-                            for(int j=0; j<fd_count; j++) {
-                                if(pfds[j].fd != listener && pfds[j].fd != STDIN_FILENO) {
-                                    if(send(pfds[j].fd, input, strlen(input), 0) == -1) {
-                                        perror("send");
-                                    }
-                                }
-                            }
-                        }
+                    // printf("msg sent from server\n");
+                }
+            }
+            if(pfds[2].revents & POLLIN){
+                // printf("reciveing msg from client:\n");
+
+                int nbytes = recv(pfds[2].fd,buff,sizeof(buff),0);
+                if (nbytes <= 0) {
+                    // Got error or connection closed by client
+                    if (nbytes == 0) {
+                        // Connection closed
+                        printf("pollserver: socket %d hung up\n", pfds[2].fd);
+                    } 
+                    else {
+                        perror("recv");
                     }
-                    else{
-                        printf("reciveing msg from client:\n");
-                        int nbytes = recv(pfds[i].fd,buff,sizeof(buff),0);
-                        int sender_fd = pfds[i].fd;
-                        if (nbytes <= 0) {
-                            // Got error or connection closed by client
-                            if (nbytes == 0) {
-                                // Connection closed
-                                printf("pollserver: socket %d hung up\n", sender_fd);
-                            } else {
-                                perror("recv");
-                            }
-
-                            close(pfds[i].fd); // Bye!
-                            del_from_pfds(pfds, i, &fd_count);
-
-                        } else {
-                            // We got some good data from a client
-                            printf("%s\n",buff);
-
-                        }
-                    }
+                    close(pfds[2].fd); // Bye!
+                    del_from_pfds(pfds, 2, &fd_count);
 
                 }
-
+                else {
+                    // We got some good data from a client
+                    printf("Client: %s",buff);
+                }
             }
-        }
 
+        }
+      
     }
+
+    
     else if(argc==4){        // Client side
         int client_fd;
         if((client_fd = get_connection_socket(castPort(argv[3]),argv[2])) == -1){
             perror("connect");
             exit(4);
         }
-        else{
-            int fd_count =0,fd_size = 2;
-            struct pollfd *pfds= malloc(sizeof(*pfds) * fd_size);   // poll for server fds connections
-            if(pfds == NULL){
-                printf("malloc error");
-                exit(5);
-            }
-            
-            pfds[0].fd=STDIN_FILENO;
-            pfds[0].events= POLLIN;
-            pfds[1].fd = client_fd;
-            pfds[1].events = POLLIN;
-
-            for(;;){ // for ever
-                int poll_count = poll(pfds, fd_count, -1);
-                if(poll_count==-1){
-                    perror("poll");
-                    exit(2);
-                }
-                if(pfds[1].revents && POLLIN){
-                    printf("msg comingn\n");
-                    int nbytes = recv(pfds[0].fd,buff,sizeof(buff),0);
-                    int server_fd = pfds[1].fd;
-                    if (nbytes <= 0) {
-                        // Got error or connection closed by client
-                        if (nbytes == 0) {
-                            // Connection closed
-                            printf("pollserver: socket %d hung up\n", server_fd);
-                        } else {
-                            perror("recv");
-                        }
-
-                        close(pfds[1].fd); // Bye!
-                        del_from_pfds(pfds, 1, &fd_count);
-
-                    } else {
-                        // We got some good data from a client
-                        printf("%s\n",buff);
-                    }                            
-                }
-                else if(pfds[0].revents && POLLIN){
-                    printf("client writing\n");
-                    char input[256];
-                    if(fgets(input, sizeof(input), stdin) != NULL) {
-                        if(send(pfds[0].fd, input, strlen(input), 0) == -1) {
-                            perror("send");
-                        }
-                    }                            
-                }
-
-            }
+        int fd_count =0,fd_size = 2;
+        struct pollfd *pfds= malloc(sizeof(*pfds) * fd_size);   // poll for server fds connections
+        if(pfds == NULL){
+            printf("malloc error");
+            exit(5);
         }
+        pfds[0].fd=STDIN_FILENO;
+        pfds[0].events= POLLIN;
+        pfds[1].fd = client_fd;
+        pfds[1].events = POLLIN;
+        fd_count = 2;
+
+        for(;;){ // for ever
+            int poll_count = poll(pfds, fd_count, -1);
+            if(poll_count==-1){
+                perror("poll");
+                exit(2);
+            }
+            memset(buff,0,sizeof(buff));
+            if(pfds[1].revents && POLLIN){
+                int nbytes = recv(pfds[1].fd,buff,sizeof(buff),0);
+                int server_fd = pfds[1].fd;
+                if (nbytes <= 0) {
+                    // Got error or connection closed by client
+                    if (nbytes == 0) {
+                        // Connection closed
+                        printf("pollserver: socket %d hung up\n", server_fd);
+                    } 
+                    else {
+                        perror("recv");
+                    }
+
+                    close(pfds[1].fd); // Bye!
+                    del_from_pfds(pfds, 1, &fd_count);
+
+                } 
+                else {
+                    // We got some good data from a client
+                    printf("Server: %s",buff);
+                }                            
+            }
+            if(pfds[0].revents && POLLIN){
+                char input[256];
+                if(fgets(input, sizeof(input), stdin) != NULL) {
+                    if(send(pfds[1].fd, input, strlen(input), 0) == -1) {
+                        perror("send");
+                    }
+                }                            
+            }
+
+        }
+        
     }
     else{
         perror("Usage Server side: stnc -s PORT\nUsage Client side: stnc -c IP PORT");
