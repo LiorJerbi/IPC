@@ -33,6 +33,7 @@ void del_from_pfds(struct pollfd pfds[], int i, int *fd_count)
 
     (*fd_count)--;
 }
+
 // Return a listening socket
 int get_listener_socket(int port)
 {   
@@ -47,7 +48,7 @@ int get_listener_socket(int port)
     struct sockaddr_in serverAddress;
     memset(&serverAddress,0,sizeof(serverAddress));
     serverAddress.sin_family = AF_INET;
-    inet_pton(AF_INET,"10.9.0.1",&serverAddress.sin_addr.s_addr);
+    serverAddress.sin_addr.s_addr = INADDR_ANY;
     serverAddress.sin_port = htons(port);
     
     //Reuse the address and port.(prevents errors such as "address already in use")
@@ -120,6 +121,11 @@ void server_chat_Handler(int port)
         if(pfds[1].revents & POLLIN){
             char input[256];
             if(fgets(input, sizeof(input), stdin) != NULL) {
+                if(!strcmp(input,"exit")){
+                    free(pfds);
+                    printf("Server exit");
+                    exit(0);
+                }
                 if(send(pfds[2].fd, input, strlen(input), 0) == -1) {
                     perror("send");
                 }
@@ -149,6 +155,9 @@ void server_chat_Handler(int port)
             }
         }
 
+
     }
 
 }
+void get_params(, char*);
+

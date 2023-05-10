@@ -4,7 +4,7 @@ FLAGS = -Wall -g -fPIC
 all: stnc
 
 stnc: server.o client.o stnc.o
-	$(CC) $(FLAGS) -o stnc stnc.o server.o client.o
+	$(CC) $(FLAGS) -o stnc stnc.o server.o client.o -lssl -lcrypto
 
 stnc.o: stnc.c client.c server.c
 	$(CC) $(FLAGS) -c stnc.c
