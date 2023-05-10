@@ -61,25 +61,25 @@ int main(int argc, char *argv[]){
 
         int listener =  get_listener_socket(castPort(argv[2]));
         if(listener == -1){
-            printf("error listener");
+            printf("error listener\n");
             exit(1);
         }
-        socklen_t clilen=sizeof(clientAddr);
-        newfd = accept(listener,(struct sockaddr *)&clientAddr,&clilen);         
-        if(newfd == -1){
-            perror("accept");
-            exit(3);
-        }
-        char pbuff[IV4_SIZE];
-        printf("new connection %s\n", inet_ntop(AF_INET,&clientAddr.sin_addr,pbuff,IV4_SIZE));
+        // socklen_t clilen=sizeof(clientAddr);
+        // newfd = accept(listener,(struct sockaddr *)&clientAddr,&clilen);         
+        // if(newfd == -1){
+        //     perror("accept");
+        //     exit(3);
+        // }
+        // char pbuff[IV4_SIZE];
+        // printf("new connection %s\n", inet_ntop(AF_INET,&clientAddr.sin_addr,pbuff,IV4_SIZE));
             
         pfds[0].fd=listener;
         pfds[0].events=POLLIN;
         pfds[1].fd = STDIN_FILENO;
         pfds[1].events=POLLIN;
-        pfds[2].fd = newfd;
-        pfds[2].events = POLLIN;
-        fd_count = 3;
+        // pfds[2].fd = newfd;
+        // pfds[2].events = POLLIN;
+        fd_count = 2;
         for(;;){        //for ever
             int poll_count = poll(pfds, fd_count, -1);
             if(poll_count==-1){
@@ -87,6 +87,23 @@ int main(int argc, char *argv[]){
                 exit(2);
             }
             memset(buff,0,sizeof(buff));
+            if(pfds[0].revents && POLLIN){
+                    socklen_t clilen=sizeof(clientAddr);
+                    newfd = accept(listener,(struct sockaddr *)&clientAddr,&clilen);         
+                    if(newfd == -1){
+                        perror("accept");
+                        exit(3);
+                    }
+                    else{
+                        // addfds(&pfds,newfd,&fd_count,&fd_size);
+                        fd_count++;
+                        pfds[2].fd = newfd;
+                        pfds[2].events = POLLIN;
+                        char pbuff[IV4_SIZE];
+                        printf("new connection %s\n", inet_ntop(AF_INET,&clientAddr.sin_addr,pbuff,IV4_SIZE));
+
+                    }
+            }
             if(pfds[1].revents & POLLIN){
                 char input[256];
                 if(fgets(input, sizeof(input), stdin) != NULL) {
@@ -157,6 +174,7 @@ int main(int argc, char *argv[]){
                     if (nbytes == 0) {
                         // Connection closed
                         printf("pollserver: socket %d hung up\n", server_fd);
+                        exit(0);
                     } 
                     else {
                         perror("recv");
