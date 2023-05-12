@@ -3,6 +3,13 @@
         "netdb.h": "c",
         "string": "c",
         "stdio.h": "c",
-        "inet.h": "c"
+        "inet.h": "c",
+        "array": "c",
+        "compare": "c",
+        "functional": "c",
+        "tuple": "c",
+        "type_traits": "c",
+        "utility": "c",
+        "random": "c"
     }
 }

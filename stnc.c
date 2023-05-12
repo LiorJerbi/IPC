@@ -27,27 +27,31 @@ int main(int argc, char *argv[]){
 
     
     else if(argc==4){       
-        if(strcmp(argv[1],"-c")){ // Client chat side
+        if(!strcmp(argv[1],"-c")){ // Client chat side
             client_chat_Handler(atoi(argv[3]),argv[2]);
         }
         else if(!strcmp(argv[1],"-s")){ //server test performance (without q mode)
-
+            performance_handler(atoi(argv[2]),1);
         }
         else{
-            perror("Usage Server side: stnc -s PORT\nUsage Client side: stnc -c IP PORT");
+            perror("Usage Server side: ./stnc -s PORT\nUsage Client side: stnc -c IP PORT");
             exit(1);
         } 
     }
     else if(argc == 5){ //server test performance with q mode
-        
-
-
-    }       
+        if(!strcmp(argv[4],"-q")){
+            performance_handler(atoi(argv[2]),0);
+        }
+        else{
+            printf("Usage: ./stnc -s port -p (p for performance test)-q (q for quiet)\n");
+        }       
+    }
     else if(argc == 7){ //client test preformance
         char* type = argv[5];
         char* param = argv[6];
         if(!strcmp(type,"ipv4")){
             if(!strcmp(param,"tcp")){
+                send_params(atoi(argv[3]),argv[2],param,type);
                 perform_tcp_ipv4(atoi(argv[3]),argv[2]);
                 return 0;
             }

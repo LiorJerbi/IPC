@@ -8,9 +8,13 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <poll.h>
+#include <sys/time.h>
+#include <openssl/evp.h>
 #include "server.h"
 
-#define  IV4_SIZE sizeof(struct sockaddr_in) 
+#define  IV4_SIZE sizeof(struct sockaddr_in)
+#define MSG_SIZE 100000000
+#define BUFF_SIZE 32000
 
 
 
@@ -32,6 +36,43 @@ void del_from_pfds(struct pollfd pfds[], int i, int *fd_count)
     pfds[i] = pfds[*fd_count-1];
 
     (*fd_count)--;
+}
+
+//Return a ipv6 listen socket
+int get_listener6_socket(int port){
+    int listener;     // Listening socket descriptor
+    listener = socket(AF_INET6,SOCK_STREAM,0);
+    if(listener == -1){
+        perror("Could not create listening socket.\n");
+        close(listener);
+        return -1;
+    }
+    //attach the socket to the reciver details.
+    struct sockaddr_in6 serverAddress;
+    memset(&serverAddress,0,sizeof(serverAddress));
+    serverAddress.sin6_family = AF_INET6;
+    serverAddress.sin6_addr = in6addr_any;
+    serverAddress.sin6_port = htons(port);
+    
+    //Reuse the address and port.(prevents errors such as "address already in use")
+    int yes = 1;
+    if((setsockopt(listener,SOL_SOCKET,SO_REUSEADDR, &yes, sizeof(yes))) < 0){
+        perror("setsockopt() failed\n");
+        close(listener);
+        exit(1);
+    }
+    if(bind(listener,(struct sockaddr *)&serverAddress, sizeof(serverAddress)) == -1){
+        perror("Binding failed.\n");
+        close(listener);
+        return -1;
+    }
+    printf("Bind succeeded!\n");
+
+    if(listen(listener,1) == -1){
+        perror("listen_faild");
+        exit(1);
+    }
+    return listener;
 }
 
 // Return a listening socket
@@ -66,7 +107,8 @@ int get_listener_socket(int port)
     printf("Bind succeeded!\n");
 
     if(listen(listener,1) == -1){
-        return -1;
+        perror("listen_faild");
+        exit(1);
     }
     return listener;
 
@@ -159,5 +201,196 @@ void server_chat_Handler(int port)
     }
 
 }
-void get_params(, char*);
+
+
+void get_params(int port,char* params){
+    memset(params,0,strlen(params));
+    int listenfd = get_listener_socket(port);
+    struct sockaddr_in clientAddr;
+    socklen_t clilen=sizeof(clientAddr);
+    int newfd = accept(listenfd,(struct sockaddr *)&clientAddr,&clilen);
+    char pbuff[IV4_SIZE];
+    printf("new connection %s\n", inet_ntop(AF_INET,&clientAddr.sin_addr,pbuff,IV4_SIZE));
+
+    if(newfd == -1){
+        perror("get_params: (server row 169)\n");
+        exit(-1);
+    }
+    int byte_rec = recv(newfd,params,sizeof(params),0);
+    if(byte_rec == -1){
+        perror("get_first_msg: (server row 174)\n");
+        exit(-1);
+    }
+    close(newfd);
+    close(listenfd);   
+}
+
+char* checksum(const char* data, size_t data_size)
+{
+    EVP_MD_CTX *mdContext;
+    mdContext = EVP_MD_CTX_new();
+    EVP_DigestInit_ex(mdContext, EVP_md5(), NULL);
+    EVP_DigestUpdate(mdContext, data, data_size);
+
+    char* checksum = malloc(EVP_MD_size(EVP_md5()));
+    if (!checksum) {
+        perror("malloc");
+        return NULL;
+    }
+
+    unsigned int checksum_size;
+    EVP_DigestFinal_ex(mdContext, (unsigned char*)checksum, &checksum_size);
+    EVP_MD_CTX_free(mdContext);
+
+    return checksum;
+}
+
+
+void ipv4_tcp(int port,int flag){
+    char* checksm=malloc(sizeof(char*)*MSG_SIZE);
+    char* msg =malloc(sizeof(char*)*MSG_SIZE);
+
+    int listen_fd = get_listener_socket(port);
+    struct sockaddr_in clientAddr;
+    socklen_t clilen=sizeof(&clientAddr); 
+    int newfd = accept(listen_fd,(struct sockaddr *)&clientAddr,&clilen);
+    if(newfd == -1){
+        perror("tcp_ipv4_accept\n");
+        free(msg);
+        free(checksm);
+        close(listen_fd);
+        exit(-1);
+    }
+    char pbuff[IV4_SIZE];
+    printf("new connection %s\n", inet_ntop(AF_INET,&clientAddr.sin_addr,pbuff,IV4_SIZE));
+    int byte_rec = recv(newfd,checksm,sizeof(checksm),0);
+    if(byte_rec == -1){
+        perror("tcp_ipv4_checksum msg\n");
+        free(msg);
+        free(checksm);
+        close(listen_fd);
+        close(newfd);
+        exit(-1);
+    }
+
+    // Start timer
+    struct timeval start_time = {0};
+    gettimeofday(&start_time, NULL);
+    // Receive data
+    int msg_bytes_received = 0;
+    while (msg_bytes_received < MSG_SIZE) {
+        byte_rec = recv(newfd, msg + msg_bytes_received, MSG_SIZE - msg_bytes_received, 0);
+        if (byte_rec == -1) {
+            perror("tcp_ipv4_recv_msg");
+            free(msg);
+            free(checksm);
+            close(listen_fd);
+            close(newfd);
+            exit(-1);
+        }
+        msg_bytes_received += byte_rec;
+    }
+    // Stop timer
+    struct timeval end_time = {0};
+    gettimeofday(&end_time, NULL);
+    // Calculate elapsed time
+    double elapsed_time = ((end_time.tv_sec - start_time.tv_sec) * 1000.0) + ((end_time.tv_usec - start_time.tv_usec)/1000.0);
+    
+    //checksum comper
+    char* checksm_cmp = checksum(msg,MSG_SIZE);
+    if(!strcmp(checksm,checksm_cmp) ){
+        perror("server_tcp_ipv4 checksum\n");
+        free(msg);
+        free(checksm);
+        free(checksm_cmp);
+        close(newfd);
+        close(listen_fd);
+        // exit(-1);
+    }
+    if(flag == 1){
+        printf("%s\n",msg);
+    }
+    printf("ipv4_tcp,%f\n",elapsed_time);
+    free(msg);
+    free(checksm);
+    free(checksm_cmp);
+    close(listen_fd);
+    close(newfd);
+    exit(0);
+
+}
+
+void ipv6_tcp(int port){
+    
+
+}
+
+
+
+void performance_handler(int port,int flag){
+    char* params[2];
+    char paramst[256] = {0};
+    char type[128]={0};
+    char param[128]={0};
+    get_params(port,paramst);
+
+    for(int i=0;i<256;++i){
+        if(paramst[i]==' '){
+            strncpy(type,paramst,i);
+            strncpy(param,(paramst+i+1),strlen(paramst)-strlen(type));
+            break;
+        }
+    }
+    params[0]=type;
+    params[1]=param;
+    if(!strcmp(params[0],"ipv4")){
+        if(!strcmp(params[1],"tcp")){
+            ipv4_tcp(port,flag);
+        }
+        else if(!strcmp(params[1],"udp")){
+
+        }
+        else{
+            perror("Usage: stnc -c IP PORT -p <type> <param>\n");
+            exit(1);
+        }
+    }
+    else if(!strcmp(params[0],"ipv6")){
+        if(!strcmp(params[1],"tcp")){
+
+
+        }
+        else if(!strcmp(params[1],"udp")){
+
+        }
+        else{
+            perror("Usage: stnc -c IP PORT -p <type> <param>\n");
+            exit(1);           
+        }
+    }
+    else if(!strcmp(params[0],"uds")){
+        if(!strcmp(params[1],"dgram")){
+
+        }
+        else if(!strcmp(params[1],"stream")){
+
+        }
+        else{
+            perror("Usage: stnc -c IP PORT -p <type> <param>\n");
+            exit(1);
+        }
+    }
+    else if(!strcmp(params[0],"mmap")){
+
+        
+    }
+    else if(!strcmp(params[0],"pipe")){
+        
+        
+    }
+    else{
+    perror("Usage: stnc -c IP PORT -p <type> <param>\n");
+    exit(1);            
+    }
+}
 

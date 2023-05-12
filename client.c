@@ -9,7 +9,7 @@
 #include <netdb.h>
 #include <poll.h>
 #include <time.h>
-#include <openssl/md5.h>
+#include <openssl/evp.h>
 #include "client.h"
 
 #define MSG_SIZE 100000000
@@ -68,7 +68,7 @@ int get_connection_socket(int port,char* ip,int flag){
         return sender_sockfd;        
     }
     else{
-        return NULL;
+        return -1;
     }
 }
 
@@ -89,19 +89,22 @@ char* get_chunkData()
     return data;
 }
 
-unsigned char* checksum(const char* data, size_t data_size)
+char* cchecksum(const char* data, size_t data_size)
 {
-    MD5_CTX mdContext;
-    MD5_Init(&mdContext);
-    MD5_Update(&mdContext, data, data_size);
+    EVP_MD_CTX *mdContext;
+    mdContext = EVP_MD_CTX_new();
+    EVP_DigestInit_ex(mdContext, EVP_md5(), NULL);
+    EVP_DigestUpdate(mdContext, data, data_size);
 
-    unsigned char* checksum = malloc(MD5_DIGEST_LENGTH);
+    char* checksum = malloc(EVP_MD_size(EVP_md5()));
     if (!checksum) {
         perror("malloc");
         return NULL;
     }
 
-    MD5_Final(checksum, &mdContext);
+    unsigned int checksum_size;
+    EVP_DigestFinal_ex(mdContext, (unsigned char*)checksum, &checksum_size);
+    EVP_MD_CTX_free(mdContext);
 
     return checksum;
 }
@@ -173,7 +176,7 @@ void client_chat_Handler(int port,char* ip)
         }
 }
 
-void send_params(int port, char* ip){
+void send_params(int port, char* ip,char* parm,char* type){
     char buff[BUFF_SIZE];
     
     int client_fd;
@@ -181,20 +184,17 @@ void send_params(int port, char* ip){
         perror("connect\n");
         exit(4);
     }
-    strcpy(buff,ip);
+
+    strcat(buff,type);
+    strcat(buff," ");
+    strcat(buff,parm);
+    printf("%s\n",buff);
     int bytesent = send(client_fd,buff,sizeof(buff),0);
     if(bytesent <  0){
         perror("inside send method\n");
         exit(0);
     }
-    sprintf(buff,"%d",port);
-    int bytesent = send(client_fd,buff,sizeof(buff),0);
-    if(bytesent <  0){
-        perror("inside send method\n");
-        exit(0);
-    }
-    return;
-    
+    close(client_fd);
 }
 
 void perform_tcp_ipv4(int port,char* ip){
@@ -207,7 +207,7 @@ void perform_tcp_ipv4(int port,char* ip){
     memset(buff,0,sizeof(buff));
     char *msg = get_chunkData();
 
-    char *chksum = checksum(msg,MSG_SIZE);
+    char *chksum = cchecksum(msg,MSG_SIZE);
     int bytesent = send(client_fd,chksum,sizeof(chksum),0);
     if(bytesent < 0){
         perror("send checksum\n");
@@ -223,6 +223,9 @@ void perform_tcp_ipv4(int port,char* ip){
         free(chksum);
         exit(0);
     }
+    free(msg);
+    free(chksum);
+    close(client_fd);
 
 }
 void perform_tcp_ipv6(int port,char* ip){
@@ -235,7 +238,7 @@ void perform_tcp_ipv6(int port,char* ip){
     memset(buff,0,sizeof(buff));
     char *msg = get_chunkData();
 
-    char *chksum = checksum(msg,MSG_SIZE);
+    char *chksum = cchecksum(msg,MSG_SIZE);
     int bytesent = send(client_fd,chksum,sizeof(chksum),0);
     if(bytesent < 0){
         perror("send checksum\n");
