@@ -2,7 +2,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <sys/mman.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -11,11 +14,13 @@
 #include <time.h>
 #include <errno.h>
 #include <openssl/evp.h>
+#include <sys/un.h>
 #include "client.h"
 
 #define MSG_SIZE 100000000
 #define BUFF_SIZE 32000
 #define CHECKSUM_SIZE sizeof(char)*32
+#define SOCK_PATH "server_uds"
 
 
 
@@ -379,7 +384,177 @@ void perform_udp_ipv6(int port,char* ip){
 
 }
 
+void perform_stream_uds(char* src){
+    int clientfd, len;
+    struct sockaddr_un remote = {
+        .sun_family = AF_UNIX,
+        // .sun_path = SOCK_PATH,   // Can't do assignment to an array
+    };
 
+    if ((clientfd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
+        perror("socket");
+        exit(1);
+    }
+    
+
+    printf("Trying to connect...\n");
+
+    strcpy(remote.sun_path,SOCK_PATH);
+    len = strlen(remote.sun_path) + sizeof(remote.sun_family);
+    sleep(1);
+    if (connect(clientfd, (struct sockaddr *)&remote, len) == -1) {
+        perror("connect");
+        exit(1);
+    }
+
+    int byte_sent;
+    printf("Connected.\n");
+    char* msg = get_chunkData();
+    char* checksum = cchecksum(msg,MSG_SIZE);
+
+    if ((byte_sent=send(clientfd, checksum, CHECKSUM_SIZE, 0)) == -1) {
+        perror("send"); 
+        close(clientfd);
+        free(checksum);
+        free(msg);
+        exit(1);       
+    }
+
+    if ((byte_sent=send(clientfd, msg, MSG_SIZE, 0)) == -1) {
+        perror("send"); 
+        close(clientfd);
+        free(checksum);
+
+        free(msg);
+        exit(1);       
+    }
+    free(checksum);
+    close(clientfd);
+    free(msg);
+    exit(0); 
+}
+
+void perform_dgram_uds(char* src ){
+
+    int clientfd, len;
+    struct sockaddr_un remote = {
+        .sun_family = AF_UNIX,
+        // .sun_path = SOCK_PATH,   // Can't do assignment to an array
+    };
+
+    if ((clientfd = socket(AF_UNIX, SOCK_DGRAM, 0)) == -1) {
+        perror("socket");
+        exit(1);
+    }
+    
+
+  
+
+    strcpy(remote.sun_path,SOCK_PATH);
+    len = strlen(remote.sun_path) + sizeof(remote.sun_family);
+    sleep(1);
+
+    int byte_sent;
+    char* msg = get_chunkData();
+    char* checksum = cchecksum(msg,MSG_SIZE);
+    
+    if (sendto(clientfd,checksum , CHECKSUM_SIZE, 0, (struct sockaddr*)&remote, len) == -1) {
+        perror("send"); 
+        close(clientfd);
+        free(checksum);
+        free(msg);
+        exit(1);       
+    }
+
+    int sum_byte = 0;
+    while(sum_byte < MSG_SIZE){
+        byte_sent = sendto(clientfd,msg+sum_byte , BUFF_SIZE, 0,(struct sockaddr*)&remote, len);
+        if (byte_sent < 0) {
+            perror("Error sending message\n");
+            free(checksum);
+            free(msg);
+            close(clientfd);
+            exit(EXIT_FAILURE);
+        }
+        sum_byte += byte_sent;
+    }
+    free(checksum);
+    close(clientfd);
+    free(msg);
+    exit(0);     
+}
+
+void perform_filename_mmap(char* src){
+    int fd;
+    struct stat sbuf;
+
+
+    if ((fd = open(src, O_WRONLY)) == -1) {
+            perror("open");
+            exit(1);
+    }
+    if (stat(src, &sbuf) == -1) {
+            perror("stat");
+            exit(1);
+    }
+    char *msg = get_chunkData();
+    char *checksm = cchecksum(msg,MSG_SIZE);
+    char* map = mmap((void*)0,CHECKSUM_SIZE, PROT_WRITE, MAP_SHARED, fd, 0);
+    if(checksm == MAP_FAILED){
+        perror("mmap\n");
+        free(msg);
+        free(checksm);
+        exit(1);
+    }
+    strcpy(map,checksm);
+    map = mmap((void*)0,MSG_SIZE, PROT_WRITE, MAP_SHARED, fd, 0);
+    if(checksm == MAP_FAILED){
+        perror("mmap\n");
+        free(msg);
+        free(checksm);  
+        exit(1);
+    }
+    strcpy(map,msg);
+    free(msg);
+    free(checksm);
+    close(fd);
+    exit(0);
+
+}
+void perform_filename_pipe(char* src){
+    int fd;
+
+    mkfifo(src,0666);
+
+    fd = open(src, O_WRONLY);
+    
+    int byte_sent;
+    char* msg = get_chunkData();
+    char* checksum = cchecksum(msg,MSG_SIZE);
+
+
+    if ((byte_sent=write(fd, checksum, CHECKSUM_SIZE)) == -1) {
+        perror("send"); 
+        close(fd);
+        free(checksum);
+        free(msg);
+        exit(1);       
+    }
+
+    if ((byte_sent=write(fd, msg, MSG_SIZE)) == -1) {
+        perror("send"); 
+        close(fd);
+        free(checksum);
+
+        free(msg);
+        exit(1);       
+    }
+    free(checksum);
+    close(fd);
+    free(msg);
+    exit(0); 
+    
+}
 
 
 

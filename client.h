@@ -10,5 +10,8 @@ void perform_tcp_ipv6(int ,char* );
 void perform_udp_ipv4(int ,char* );
 void perform_udp_ipv6(int ,char* );
 void send_params(int, char*,char*);
-
+void perform_stream_uds(char*);
+void perform_dgram_uds(char*);
+void perform_filename_mmap(char*);
+void perform_filename_pipe(char*);
 #endif

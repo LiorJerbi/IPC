@@ -20,7 +20,7 @@ int main(int argc, char *argv[]){
             server_chat_Handler(atoi(argv[2]));
         }
         else{
-        perror("Usage Server side: stnc -s PORT\nUsage Client side: stnc -c IP PORT");
+        perror("Usage Server side: ./stnc -s PORT\nUsage Client side: ./stnc -c IP PORT");
         exit(1);
         }
     }
@@ -34,7 +34,7 @@ int main(int argc, char *argv[]){
             performance_handler(atoi(argv[2]),1);
         }
         else{
-            perror("Usage Server side: ./stnc -s PORT\nUsage Client side: stnc -c IP PORT");
+            perror("Usage Server side: ././stnc -s PORT\nUsage Client side: ./stnc -c IP PORT");
             exit(1);
         } 
     }
@@ -44,7 +44,7 @@ int main(int argc, char *argv[]){
             performance_handler(atoi(argv[2]),0);
         }
         else{
-            printf("Usage: ./stnc -s port -p (p for performance test)-q (q for quiet)\n");
+            printf("Usage: ././stnc -s port -p (p for performance test)-q (q for quiet)\n");
         }       
     }
 
@@ -62,7 +62,8 @@ int main(int argc, char *argv[]){
                 perform_udp_ipv4(atoi(argv[3]),argv[2]);
             }
             else{
-
+                perror("Usage: ./stnc -c IP PORT -p <type> <param>\n");
+                exit(1);            
             }
         }
         else if(!strcmp(type,"ipv6")){
@@ -75,35 +76,41 @@ int main(int argc, char *argv[]){
                 perform_udp_ipv6(atoi(argv[3]),argv[2]);
             }
             else{
-                
+                perror("Usage: ./stnc -c IP PORT -p <type> <param>\n");
+                exit(1);            
             }
         }
         else if(!strcmp(type,"uds")){
             if(!strcmp(param,"dgram")){
+                send_params(atoi(argv[3]),param,type);
+                perform_dgram_uds(argv[2]);
 
             }
             else if(!strcmp(param,"stream")){
+                send_params(atoi(argv[3]),param,type);
+                perform_stream_uds(argv[2]);
 
             }
             else{
-                
+                perror("Usage: ./stnc -c IP PORT -p <type> <param>\n");
+                exit(1);            
             }
         }
         else if(!strcmp(type,"mmap")){
-
-            
+            send_params(atoi(argv[3]),param,type);
+            perform_filename_mmap(param);
         }
         else if(!strcmp(type,"pipe")){
-            
-            
+            send_params(atoi(argv[3]),param,type);
+            perform_filename_pipe(param);         
         }
         else{
-        perror("Usage: stnc -c IP PORT -p <type> <param>\n");
+        perror("Usage: ./stnc -c IP PORT -p <type> <param>\n");
         exit(1);            
         }
     }
     else{
-        perror("Usage Server side: stnc -s PORT\nUsage Client side: stnc -c IP PORT");
+        perror("Usage Server side: ./stnc -s PORT\nUsage Client side: ./stnc -c IP PORT");
         exit(1);
     }
     return 0;

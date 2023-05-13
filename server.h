@@ -14,6 +14,8 @@ void ipv6_tcp(int,int);
 void ipv4_udp(int,int);
 void ipv6_udp(int,int);
 char* checksum(const char* , size_t );
-
-
+void stream_uds(int);
+void dgram_uds(int);
+void filename_mmap(int,char*);
+void filename_pipe(int,char*);
 #endif
