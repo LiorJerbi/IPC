@@ -807,92 +807,46 @@ void dgram_uds(int flag){
     exit(0);
 }
 
-void filename_mmap(int flag,char* filename){
-    int fd;
-    struct stat sbuf;
-
-
-    if ((fd = open(filename, O_RDONLY)) == -1) {
-            perror("open");
-            exit(1);
-    }
-
-    if (stat(filename, &sbuf) == -1) {
-            perror("stat");
-            exit(1);
-    }
-
-
-    // char* checksm = malloc(sizeof(char)*CHECKSUM_SIZE);
-    // char* msg = malloc(sizeof(char)*MSG_SIZE);
-    // if(msg == NULL || checksm == NULL){
-    //     perror("Malloc\n");
-    //     exit(1);
-    // }
-
-    // int byte_rec;  
-    sleep(1);
-    char* checksm = mmap((void*)0,CHECKSUM_SIZE, PROT_READ, MAP_SHARED, fd, 0);
-    if(checksm == MAP_FAILED){
-        perror("mmap\n");
+void filename_mmap(int flag,char* filepath){
+   
+    // FILE *f = NULL;
+    int fd = open(filepath, O_RDONLY | O_CREAT);
+    if(fd < 0){
+        printf("\n\"%s \" could not open\n",
+               filepath);
         exit(1);
     }
-    // if(byte_rec == -1){
-    //     perror("pipe_checksum msg\n");
-    //     // free(msg);
-    //     // free(checksm);
-    //     close(fd);
-    //     exit(-1);
-    // }
+
+    struct stat statbuf;
+    int err = fstat(fd, &statbuf);
+    if(err < 0){
+        printf("\n\"%s \" could not open\n",
+                       filepath);
+        exit(2);
+    }
+
     
-    // Start timer
-    struct timeval start_time = {0};
-    gettimeofday(&start_time, NULL);
-    // int max_byte_rec = 0;
-    char* msg;
-    // while(max_byte_rec < MSG_SIZE){    
-    //     if((msg=mmap((void*),MSG_SIZE,PROT_READ, MAP_SHARED, fd, max_byte_rec)) <0){
-    //         perror("recv\n");
-    //         free(msg);
-    //         free(checksm);
-    //         close(fd);
-    //         exit(-1);
-    //     }
-    //     max_byte_rec += byte_rec;
-        
+    char *ptr = mmap(NULL,statbuf.st_size,
+            PROT_READ|PROT_WRITE,MAP_SHARED,
+            fd,0);
+    if(ptr == MAP_FAILED){
+        printf("Mapping Failed\n");
+    }
+    close(fd);
+    char* msg = malloc(sizeof(char)*MSG_SIZE);
+    // ssize_t n = read(ptr,msg,statbuf.st_size);
+    memcpy(msg,ptr,statbuf.st_size);
+    // if(n != statbuf.st_size){
+    //     printf("Read failed\n");
+    //     free(msg);
+
     // }
-    if((msg=mmap((void*)0,MSG_SIZE,PROT_READ, MAP_SHARED, fd, 0)) <0){
-            perror("recv\n");
-            // free(msg);
-            // free(checksm);
-            close(fd);
-            exit(-1);
-    }
-    // printf("Byte rec: %d\n",max_byte_rec);
 
-    // Stop timer
-    struct timeval end_time = {0};
-    gettimeofday(&end_time, NULL);
-    // Calculate elapsed time
-    double elapsed_time = ((end_time.tv_sec - start_time.tv_sec) * 1000.0) + ((end_time.tv_usec - start_time.tv_usec)/1000.0);
-
-    //checksum compere
-    char* checksm_cmp = checksum(msg,MSG_SIZE);
-
-    if(strcmp(checksm,checksm_cmp) != 0 ){
-        printf("checksum inccorect!\n");
-    }
-    else{
-        printf("checksum correct!\n");
-    }
+   
     if(flag == 1){
         printf("%s\n",msg);
     }
-    printf("mmap,%f\n",elapsed_time);
-    // free(msg);
-    // free(checksm);
-    free(checksm_cmp);
-    close(fd);
+    free(msg);
     exit(0);
 
 

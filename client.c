@@ -484,40 +484,36 @@ void perform_dgram_uds(char* src ){
     exit(0);     
 }
 
-void perform_filename_mmap(char* src){
-    int fd;
-    struct stat sbuf;
-
-
-    if ((fd = open(src, O_WRONLY)) == -1) {
-            perror("open");
-            exit(1);
-    }
-    if (stat(src, &sbuf) == -1) {
-            perror("stat");
-            exit(1);
-    }
-    char *msg = get_chunkData();
-    char *checksm = cchecksum(msg,MSG_SIZE);
-    char* map = mmap((void*)0,CHECKSUM_SIZE, PROT_WRITE, MAP_SHARED, fd, 0);
-    if(checksm == MAP_FAILED){
-        perror("mmap\n");
-        free(msg);
-        free(checksm);
+void perform_filename_mmap(char* filepath){
+    
+    int fd = open(filepath, O_WRONLY | O_CREAT);
+    if(fd < 0){
+        printf("\n\"%s \" could not open\n",
+               filepath);
         exit(1);
     }
-    strcpy(map,checksm);
-    map = mmap((void*)0,MSG_SIZE, PROT_WRITE, MAP_SHARED, fd, 0);
-    if(checksm == MAP_FAILED){
-        perror("mmap\n");
-        free(msg);
-        free(checksm);  
-        exit(1);
+
+    struct stat statbuf;
+    int err = fstat(fd, &statbuf);
+    if(err < 0){
+        printf("\n\"%s \" could not open\n",
+                       filepath);
+        exit(2);
     }
-    strcpy(map,msg);
-    free(msg);
-    free(checksm);
+
+    char *ptr = mmap(NULL,MSG_SIZE,PROT_WRITE,MAP_SHARED,fd,0);
+    if(ptr == MAP_FAILED){
+        printf("Mapping Failed\n");
+    }
     close(fd);
+    char *msg = get_chunkData();
+    // ssize_t n = write(fd,ptr,statbuf.st_size);
+    // if(n != statbuf.st_size){
+    //     printf("Write failed");
+    // }
+    memcpy(ptr,msg,MSG_SIZE);
+    free(msg);
+    
     exit(0);
 
 }
