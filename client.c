@@ -9,16 +9,19 @@
 #include <netdb.h>
 #include <poll.h>
 #include <time.h>
+#include <errno.h>
 #include <openssl/evp.h>
 #include "client.h"
 
 #define MSG_SIZE 100000000
 #define BUFF_SIZE 32000
+#define CHECKSUM_SIZE sizeof(char)*32
+
 
 
 int get_connection_socket(int port,char* ip,int flag){
     if(flag== 4){
-        int sender_sockfd = socket(AF_INET,SOCK_STREAM,0);
+        int sender_sockfd = socket(PF_INET,SOCK_STREAM,0);
         if(sender_sockfd == -1){
             perror("Could not create socket.\n");
             return -1;
@@ -43,7 +46,7 @@ int get_connection_socket(int port,char* ip,int flag){
         return sender_sockfd;
     }
     else if(flag == 6){
-        int sender_sockfd = socket(AF_INET6,SOCK_STREAM,0);
+        int sender_sockfd = socket(PF_INET6,SOCK_STREAM,0);
         if(sender_sockfd == -1){
             perror("Could not create socket.\n");
             return -1;
@@ -51,12 +54,21 @@ int get_connection_socket(int port,char* ip,int flag){
 
         //attaching socket to reciver port.
         struct sockaddr_in6 serverAddr;
-        memset(&serverAddr,0,sizeof(serverAddr));
+        memset(&serverAddr, 0, sizeof(serverAddr));
         serverAddr.sin6_family = AF_INET6;
         serverAddr.sin6_port = htons(port);
-        int ra = inet_pton(AF_INET6,(const char*)ip,&serverAddr.sin6_addr);
-        if(ra<=0){
-            perror("inet_pton() failed!\n");
+        printf("%s\n",ip);
+        if (inet_pton(AF_INET6, ip, &serverAddr.sin6_addr) <= 0) {
+            if (errno == EAFNOSUPPORT) {
+                perror("AF_INET6 not supported\n");
+            } else if (errno == ENETUNREACH) {
+                perror("The network is unreachable\n");
+            } else if (errno == EINVAL) {
+                perror("Invalid IPv6 address\n");
+            } else {
+                perror("inet_pton() failed\n");
+            }
+            close(sender_sockfd);
             return -1;
         }
         //Make a connection to reciver.
@@ -176,11 +188,11 @@ void client_chat_Handler(int port,char* ip)
         }
 }
 
-void send_params(int port, char* ip,char* parm,char* type){
+void send_params(int port,char* parm,char* type){
     char buff[BUFF_SIZE];
     
     int client_fd;
-    if((client_fd = get_connection_socket(port,ip,4)) == -1){
+    if((client_fd = get_connection_socket(port,"10.0.2.15",4)) == -1){
         perror("connect\n");
         exit(4);
     }
@@ -208,14 +220,13 @@ void perform_tcp_ipv4(int port,char* ip){
     char *msg = get_chunkData();
 
     char *chksum = cchecksum(msg,MSG_SIZE);
-    int bytesent = send(client_fd,chksum,sizeof(chksum),0);
+    int bytesent = send(client_fd,chksum,CHECKSUM_SIZE,0);
     if(bytesent < 0){
         perror("send checksum\n");
         free(msg);
         free(chksum);
         exit(0);
     }
-    printf("Sent checksum, sending message\n");
     bytesent = send(client_fd,msg,MSG_SIZE,0);
     if(bytesent < 0){
         perror("send message\n");
@@ -232,21 +243,20 @@ void perform_tcp_ipv6(int port,char* ip){
     char buff[BUFF_SIZE];
     int client_fd;
     if((client_fd = get_connection_socket(port,ip,6)) == -1){
-        perror("connect\n");
+        perror("connect_ipv6\n");
         exit(4);
     }
     memset(buff,0,sizeof(buff));
     char *msg = get_chunkData();
 
     char *chksum = cchecksum(msg,MSG_SIZE);
-    int bytesent = send(client_fd,chksum,sizeof(chksum),0);
+    int bytesent = send(client_fd,chksum,CHECKSUM_SIZE,0);
     if(bytesent < 0){
         perror("send checksum\n");
         free(msg);
         free(chksum);
         exit(0);
     }
-    printf("Sent checksum, sending message\n");
     bytesent = send(client_fd,msg,MSG_SIZE,0);
     if(bytesent < 0){
         perror("send message\n");
@@ -254,4 +264,123 @@ void perform_tcp_ipv6(int port,char* ip){
         free(chksum);
         exit(0);
     }
+    free(msg);
+    free(chksum);
+    close(client_fd);
 }
+
+void perform_udp_ipv4(int port,char* ip){
+    int sockfd, bytes_sent;
+    struct sockaddr_in server_addr;
+
+    // Create socket
+    if ((sockfd = socket(PF_INET, SOCK_DGRAM, 0)) < 0) {
+        perror("Error creating socket\n");
+        exit(EXIT_FAILURE);
+    }
+
+    // Set server address
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = inet_addr(ip);
+    server_addr.sin_port = htons(port);
+
+    char *msg = get_chunkData();
+    char *chksum = cchecksum(msg,MSG_SIZE);
+
+
+    // Send message
+    bytes_sent = sendto(sockfd,chksum , CHECKSUM_SIZE, 0, (struct sockaddr*)&server_addr, sizeof(server_addr));
+    if (bytes_sent < 0) {
+        perror("Error sending checksum\n");
+        free(chksum);
+        free(msg);
+        close(sockfd);
+        exit(EXIT_FAILURE);
+    }
+
+    int sum_byte = 0;
+    while(sum_byte < MSG_SIZE){
+        bytes_sent = sendto(sockfd,msg+sum_byte , BUFF_SIZE, 0, (struct sockaddr*)&server_addr, sizeof(server_addr));
+        if (bytes_sent < 0) {
+            perror("Error sending message\n");
+            free(chksum);
+            free(msg);
+            close(sockfd);
+            exit(EXIT_FAILURE);
+        }
+        sum_byte += bytes_sent;
+    }
+    printf("\nCHECK_SUM: %s\nclient msg: %s\n",chksum,msg);
+    free(chksum);
+    free(msg);
+    close(sockfd);
+    exit(0);
+}
+
+void perform_udp_ipv6(int port,char* ip){
+    int sockfd, bytes_sent;
+    struct sockaddr_in6 server_addr;
+
+    // Create socket
+    if ((sockfd = socket(PF_INET6, SOCK_DGRAM, 0)) < 0) {
+        perror("Error creating socket");
+        exit(EXIT_FAILURE);
+    }
+
+    // Set server address
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin6_family = AF_INET;
+    server_addr.sin6_port = htons(port);
+    if (inet_pton(AF_INET6, ip, &server_addr.sin6_addr) <= 0) {
+            if (errno == EAFNOSUPPORT) {
+                perror("AF_INET6 not supported\n");
+            } else if (errno == ENETUNREACH) {
+                perror("The network is unreachable\n");
+            } else if (errno == EINVAL) {
+                perror("Invalid IPv6 address\n");
+            } else {
+                perror("inet_pton() failed\n");
+            }
+        close(sockfd);
+        exit(-1);
+    }
+
+    char *msg = get_chunkData();
+    char *chksum = cchecksum(msg,MSG_SIZE);
+
+    // Send message
+    bytes_sent = sendto(sockfd,chksum , CHECKSUM_SIZE, 0, (struct sockaddr*)&server_addr, sizeof(server_addr));
+    if (bytes_sent < 0) {
+        perror("Error sending checksum");
+        free(chksum);
+        free(msg);
+        close(sockfd);
+        exit(EXIT_FAILURE);
+    }
+
+    int sum_byte = 0;
+    while(sum_byte < MSG_SIZE){
+        bytes_sent = sendto(sockfd,msg+sum_byte , BUFF_SIZE, 0, (struct sockaddr*)&server_addr, sizeof(server_addr));
+        if (bytes_sent < 0) {
+            perror("Error sending message\n");
+            free(chksum);
+            free(msg);
+            close(sockfd);
+            exit(EXIT_FAILURE);
+        }
+        sum_byte += bytes_sent;
+    }
+    free(chksum);
+    free(msg);
+    close(sockfd);
+    exit(0);
+
+
+}
+
+
+
+
+
+

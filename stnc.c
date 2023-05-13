@@ -38,6 +38,7 @@ int main(int argc, char *argv[]){
             exit(1);
         } 
     }
+
     else if(argc == 5){ //server test performance with q mode
         if(!strcmp(argv[4],"-q")){
             performance_handler(atoi(argv[2]),0);
@@ -46,17 +47,19 @@ int main(int argc, char *argv[]){
             printf("Usage: ./stnc -s port -p (p for performance test)-q (q for quiet)\n");
         }       
     }
+
     else if(argc == 7){ //client test preformance
         char* type = argv[5];
         char* param = argv[6];
         if(!strcmp(type,"ipv4")){
             if(!strcmp(param,"tcp")){
-                send_params(atoi(argv[3]),argv[2],param,type);
+                send_params(atoi(argv[3]),param,type);
                 perform_tcp_ipv4(atoi(argv[3]),argv[2]);
                 return 0;
             }
             else if(!strcmp(param,"udp")){
-
+                send_params(atoi(argv[3]),param,type);
+                perform_udp_ipv4(atoi(argv[3]),argv[2]);
             }
             else{
 
@@ -64,10 +67,12 @@ int main(int argc, char *argv[]){
         }
         else if(!strcmp(type,"ipv6")){
             if(!strcmp(param,"tcp")){
+                send_params(atoi(argv[3]),param,type);
                 perform_tcp_ipv6(atoi(argv[3]),argv[2]);
             }
             else if(!strcmp(param,"udp")){
-
+                send_params(atoi(argv[3]),param,type);
+                perform_udp_ipv6(atoi(argv[3]),argv[2]);
             }
             else{
                 

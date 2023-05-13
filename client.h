@@ -7,6 +7,8 @@ char* get_chunkData();
 char* cchecksum(const char* , size_t );
 void perform_tcp_ipv4(int ,char* );
 void perform_tcp_ipv6(int ,char* );
-void send_params(int, char*,char*,char*);
+void perform_udp_ipv4(int ,char* );
+void perform_udp_ipv6(int ,char* );
+void send_params(int, char*,char*);
 
 #endif
