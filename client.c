@@ -244,6 +244,7 @@ void perform_tcp_ipv4(int port,char* ip){
     close(client_fd);
 
 }
+
 void perform_tcp_ipv6(int port,char* ip){
     char buff[BUFF_SIZE];
     int client_fd;
@@ -316,7 +317,6 @@ void perform_udp_ipv4(int port,char* ip){
         }
         sum_byte += bytes_sent;
     }
-    printf("\nCHECK_SUM: %s\nclient msg: %s\n",chksum,msg);
     free(chksum);
     free(msg);
     close(sockfd);
@@ -485,36 +485,25 @@ void perform_dgram_uds(char* src ){
 }
 
 void perform_filename_mmap(char* filepath){
-    
-    int fd = open(filepath, O_WRONLY | O_CREAT);
-    if(fd < 0){
-        printf("\n\"%s \" could not open\n",
-               filepath);
-        exit(1);
+
+    int fd      = shm_open(filepath, O_CREAT | O_EXCL | O_RDWR, 0777);
+    char* msg = get_chunkData();
+    write(fd,msg,MSG_SIZE);
+
+    int RDWR = PROT_READ | PROT_WRITE;
+    char* data = mmap(0, MSG_SIZE, RDWR, MAP_SHARED, fd, 0);
+    if(data == MAP_FAILED){
+        perror("mmap_fail\n");
+        free(msg);
+        close(fd);
+        exit(0);
     }
 
-    struct stat statbuf;
-    int err = fstat(fd, &statbuf);
-    if(err < 0){
-        printf("\n\"%s \" could not open\n",
-                       filepath);
-        exit(2);
-    }
-
-    char *ptr = mmap(NULL,MSG_SIZE,PROT_WRITE,MAP_SHARED,fd,0);
-    if(ptr == MAP_FAILED){
-        printf("Mapping Failed\n");
-    }
-    close(fd);
-    char *msg = get_chunkData();
-    // ssize_t n = write(fd,ptr,statbuf.st_size);
-    // if(n != statbuf.st_size){
-    //     printf("Write failed");
-    // }
-    memcpy(ptr,msg,MSG_SIZE);
     free(msg);
-    
+    close(fd);
     exit(0);
+
+//   return EXIT_SUCCESS;
 
 }
 void perform_filename_pipe(char* src){

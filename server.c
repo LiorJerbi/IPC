@@ -333,7 +333,7 @@ void ipv4_tcp(int port,int flag){
     if(flag == 1){
         printf("%s\n",msg);
     }
-    printf("ipv4_tcp,%f\n",elapsed_time);
+    printf("ipv4_tcp,%d\n",(int)elapsed_time);
     free(msg);
     free(checksm);
     free(checksm_cmp);
@@ -408,7 +408,7 @@ void ipv6_tcp(int port,int flag){
     if(flag == 1){
         printf("%s\n",msg);
     }
-    printf("ipv6_tcp,%f\n",elapsed_time);
+    printf("ipv6_tcp,%d\n",(int)elapsed_time);
     free(msg);
     free(checksm);
     free(checksm_cmp);
@@ -518,7 +518,7 @@ void ipv4_udp(int port,int flag){
     if(flag == 1){
         printf("%s\n",msg);
     }
-    printf("ipv4_udp,%f\n",elapsed_time);
+    printf("ipv4_udp,%d\n",(int)elapsed_time);
     free(msg);
     free(checksm);
     free(checksm_cmp);
@@ -622,7 +622,7 @@ void ipv6_udp(int port,int flag){
     if(flag == 1){
         printf("%s\n",msg);
     }
-    printf("ipv6_udp,%f\n",elapsed_time);
+    printf("ipv6_udp,%d\n",(int)elapsed_time);
     free(msg);
     free(checksm);
     free(checksm_cmp);
@@ -717,7 +717,7 @@ void stream_uds(int flag){
     if(flag == 1){
         printf("%s\n",msg);
     }
-    printf("stream_uds,%f\n",elapsed_time);
+    printf("stream_uds,%d\n",(int)elapsed_time);
     free(msg);
     free(checksm);
     free(checksm_cmp);
@@ -756,10 +756,9 @@ void dgram_uds(int flag){
     byte_rec = recvfrom(servfd,checksm,CHECKSUM_SIZE,0,(struct sockaddr *)&local,&len);
     
     if(byte_rec == -1){
-        perror("uds_stream_checksum msg\n");
+        perror("uds_dgram_checksum msg\n");
         free(msg);
         free(checksm);
-        close(servfd);
         exit(-1);
     }
     
@@ -799,7 +798,7 @@ void dgram_uds(int flag){
     if(flag == 1){
         printf("%s\n",msg);
     }
-    printf("dgram_uds,%f\n",elapsed_time);
+    printf("dgram_uds,%d\n",(int)elapsed_time);
     free(msg);
     free(checksm);
     free(checksm_cmp);
@@ -808,46 +807,38 @@ void dgram_uds(int flag){
 }
 
 void filename_mmap(int flag,char* filepath){
-   
-    // FILE *f = NULL;
-    int fd = open(filepath, O_RDONLY | O_CREAT);
-    if(fd < 0){
-        printf("\n\"%s \" could not open\n",
-               filepath);
+    sleep(10);
+    int fd      = shm_open(filepath, O_RDONLY, 0777);
+
+            // Start timer
+    struct timeval start_time = {0};
+    gettimeofday(&start_time, NULL);
+    char *data  = mmap(0, MSG_SIZE, PROT_READ, MAP_SHARED | MAP_FIXED, fd, 0);
+    if(data == MAP_FAILED){
+        perror("mmap_fail\n");
+        close(fd);
         exit(1);
     }
-
-    struct stat statbuf;
-    int err = fstat(fd, &statbuf);
-    if(err < 0){
-        printf("\n\"%s \" could not open\n",
-                       filepath);
-        exit(2);
-    }
-
     
-    char *ptr = mmap(NULL,statbuf.st_size,
-            PROT_READ|PROT_WRITE,MAP_SHARED,
-            fd,0);
-    if(ptr == MAP_FAILED){
-        printf("Mapping Failed\n");
-    }
-    close(fd);
-    char* msg = malloc(sizeof(char)*MSG_SIZE);
-    // ssize_t n = read(ptr,msg,statbuf.st_size);
-    memcpy(msg,ptr,statbuf.st_size);
-    // if(n != statbuf.st_size){
-    //     printf("Read failed\n");
-    //     free(msg);
-
-    // }
-
-   
+    // Stop timer
+    struct timeval end_time = {0};
+    gettimeofday(&end_time, NULL);
+    // Calculate elapsed time
+    double elapsed_time = ((end_time.tv_sec - start_time.tv_sec) * 1000.0) + ((end_time.tv_usec - start_time.tv_usec)/1000.0);
     if(flag == 1){
-        printf("%s\n",msg);
+        printf("%p\n", data); 
     }
-    free(msg);
+    printf("mmap_uds,%d\n",(int)elapsed_time);
+
+
+
+    // Close file descriptors
+
+    close(fd);
     exit(0);
+
+
+
 
 
 
@@ -859,9 +850,9 @@ void filename_pipe(int flag,char* filename){
 
     mkfifo(filename, 0666);
 
-    printf("waiting for writers...\n");
+
     fd = open(filename, O_RDONLY);
-    printf("got a writer\n");
+
 
     char* checksm = malloc(sizeof(char)*CHECKSUM_SIZE);
     char* msg = malloc(sizeof(char)*MSG_SIZE);
@@ -917,7 +908,7 @@ void filename_pipe(int flag,char* filename){
     if(flag == 1){
         printf("%s\n",msg);
     }
-    printf("pipe,%f\n",elapsed_time);
+    printf("pipe,%d\n",(int)elapsed_time);
     free(msg);
     free(checksm);
     free(checksm_cmp);
@@ -943,7 +934,6 @@ void performance_handler(int port,int flag){
     }
     params[0]=type;
     params[1]=param;
-    printf("Type: %s\nParam: %s\n",type,param);
     if(!strcmp(params[0],"ipv4")){
         if(!strcmp(params[1],"tcp")){
             ipv4_tcp(port,flag);
